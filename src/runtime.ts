@@ -1,0 +1,639 @@
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import type { FaceRecognitionSdkPlugin } from './definitions';
+import {
+  normalizeFaceBox,
+  normalizeFaceBoxes,
+} from './normalizeFaceBox';
+import { planLiveFrame, LIVE_FRAME_MAX_EDGE } from './liveFramePrep';
+import {
+  parseVideoWorkerEvent,
+  type VideoWorkerEvent,
+} from './capture/videoWorker';
+import {
+  resultDetailRows,
+  livenessPassed,
+  qualityText,
+  type DetailRow,
+  type ResultDisplaySettings,
+} from './resultDetails';
+
+const FaceRecognitionSdkNative = registerPlugin<FaceRecognitionSdkPlugin>(
+  'FaceRecognitionSdk',
+  {
+    web: () => import('./web').then((m) => new m.FaceRecognitionSdkWeb()),
+  }
+);
+
+export type ImageInput = string;
+
+export type LiveCameraPhoto = {
+  path: string;
+  orientation?: string;
+  width?: number;
+  height?: number;
+};
+
+export type LiveFrameInput = ImageInput | LiveCameraPhoto;
+
+export type LiveFrameOptions = {
+  frontCamera?: boolean;
+  orientation?: string;
+  rotateDegrees?: number;
+  maxEdge?: number;
+};
+
+export type FaceBox = {
+  /** Opaque native detection handle; pass the returned face unchanged to extraction. */
+  detectionId?: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  yaw?: number;
+  roll?: number;
+  pitch?: number;
+  liveness?: number;
+  face_quality?: number;
+  face_luminance?: number;
+  left_eye_closed?: number;
+  right_eye_closed?: number;
+  face_occlusion?: number;
+  mouth_opened?: number;
+  age?: number;
+  gender?: number;
+  livenessLabel?: string;
+  genderLabel?: string;
+  emotionLabel?: string;
+  maskLabel?: string;
+  qualityLabel?: string;
+  eyesLeftLabel?: string;
+  eyesRightLabel?: string;
+  glassesLabel?: string;
+  sunglassesLabel?: string;
+  occlusionLabel?: string;
+  attributes?: Record<string, string>;
+  landmarkCount?: number;
+  landmarks?: number[];
+};
+
+export type FaceDetectionParam = {
+  allAttributes?: boolean;
+  /** Ask for a recognition template on the first N faces, from the same open engine image. */
+  templates?: number;
+  /** Order the faces largest first, before those templates are taken. */
+  sortBySize?: boolean;
+  check_liveness?: boolean;
+  check_liveness_level?: number;
+  check_eye_closeness?: boolean;
+  check_face_occlusion?: boolean;
+  estimate_age_gender?: boolean;
+  check_pose?: boolean;
+  check_landmarks?: boolean;
+  check_quality?: boolean;
+  check_emotion?: boolean;
+  check_mask?: boolean;
+  check_glasses?: boolean;
+};
+
+export type VideoWorkerConfig = {
+  matchThreshold?: number;
+};
+
+export type LiveFrameResult = {
+  ingested: boolean;
+  width: number;
+  height: number;
+  uri?: string | null;
+};
+
+export async function getMachineCode(): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.getMachineCode();
+  return value;
+}
+
+export async function getLicenseStatus(): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.getLicenseStatus();
+  return value;
+}
+
+export async function setActivation(license: string): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.setActivation({ license });
+  return value;
+}
+
+export async function init(): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.init();
+  return value;
+}
+
+export async function deinit(): Promise<void> {
+  await FaceRecognitionSdkNative.deinit();
+}
+
+export async function lastLicenseError(): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.lastLicenseError();
+  return value;
+}
+
+export async function setLandmarkMode(mode: number): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.setLandmarkMode({ mode });
+  return value;
+}
+
+export async function getLandmarkMode(): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.getLandmarkMode();
+  return value;
+}
+
+export async function detect(
+  image: ImageInput,
+  crop: boolean = false,
+  flags: number = DETECT_ALL
+): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.detect({
+    image,
+    crop,
+    flags,
+  });
+  return value;
+}
+
+export async function faceDetection(
+  image: ImageInput,
+  param?: FaceDetectionParam | null
+): Promise<FaceBox[]> {
+  const { value } = await FaceRecognitionSdkNative.faceDetection({
+    image,
+    param: param ? JSON.stringify(param) : null,
+  });
+  try {
+    const parsed = JSON.parse(value);
+    return normalizeFaceBoxes(Array.isArray(parsed) ? parsed : []) as FaceBox[];
+  } catch {
+    return [];
+  }
+}
+
+/** Extract from a face returned by detection on this same image, without detecting again.
+ * Keep the returned face intact. Its native handle is session-local (last 256 faces);
+ * a missing or expired handle rejects instead of selecting another face.
+ */
+export async function templateExtraction(
+  image: ImageInput,
+  faceBox: FaceBox | string
+): Promise<string> {
+  const boxJson = typeof faceBox === 'string' ? faceBox : JSON.stringify(faceBox);
+  const { value } = await FaceRecognitionSdkNative.templateExtraction({
+    image,
+    faceBox: boxJson,
+  });
+  return value;
+}
+
+export async function cropFace(
+  image: ImageInput,
+  faceBox: FaceBox | string
+): Promise<string> {
+  const boxJson = typeof faceBox === 'string' ? faceBox : JSON.stringify(faceBox);
+  const { value } = await FaceRecognitionSdkNative.cropFace({
+    image,
+    faceBox: boxJson,
+  });
+  return value;
+}
+
+export async function extractFeature(image: ImageInput): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.extractFeature({ image });
+  return value;
+}
+
+export async function similarity(
+  feature1B64: string,
+  feature2B64: string
+): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.similarity({
+    feature1: feature1B64,
+    feature2: feature2B64,
+  });
+  return value;
+}
+
+/**
+ * Scores [probe] against every candidate template in one bridge call.
+ *
+ * A per-candidate round trip is what makes a large gallery feel slow in a WebView app, so the
+ * whole 1:N search is a single call. A candidate that cannot be read scores -1.
+ */
+export async function similarityMany(
+  probeB64: string,
+  candidatesB64: string[]
+): Promise<number[]> {
+  if (candidatesB64.length === 0) return [];
+  const { value } = await FaceRecognitionSdkNative.similarityMany({
+    probe: probeB64,
+    candidates: candidatesB64,
+  });
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((n) => Number(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Options for [writeFaceImage]: the whole frame, a padded face crop, or a square tile. */
+export type WriteImageOptions = {
+  box?: { x1: number; y1: number; x2: number; y2: number };
+  mode?: 'full' | 'padded' | 'square';
+  padding?: number;
+  scale?: number;
+  maxSide?: number;
+  quality?: number;
+};
+
+/** Writes a JPEG into app-private storage and returns its `file://` URI. */
+export async function writeFaceImage(
+  image: ImageInput,
+  path: string,
+  options: WriteImageOptions = {}
+): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.writeFaceImage({
+    image,
+    path,
+    options: JSON.stringify(options),
+  });
+  return value;
+}
+
+/** Deletes each path (absolute, or relative to the app files dir). Returns how many went. */
+export async function deleteFiles(paths: string[]): Promise<number> {
+  if (paths.length === 0) return 0;
+  const { value } = await FaceRecognitionSdkNative.deleteFiles({ paths });
+  return value;
+}
+
+/** Empties a directory but keeps it. Returns how many files went. */
+export async function deleteDirectory(path: string): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.deleteDirectory({ path });
+  return value;
+}
+
+export async function quality(
+  image: ImageInput,
+  crop: boolean = false
+): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.quality({ image, crop });
+  return value;
+}
+
+export async function startVideoWorker(
+  config: VideoWorkerConfig | string = { matchThreshold: 0.67 }
+): Promise<number> {
+  const json = typeof config === 'string' ? config : JSON.stringify(config ?? {});
+  const { value } = await FaceRecognitionSdkNative.startVideoWorker({
+    config: json,
+  });
+  return value;
+}
+
+export async function stopVideoWorker(): Promise<void> {
+  await FaceRecognitionSdkNative.stopVideoWorker();
+}
+
+export async function syncVideoWorkerDatabase(
+  featuresB64: string[],
+  matchThreshold: number = 0.67
+): Promise<number> {
+  const { value } = await FaceRecognitionSdkNative.syncVideoWorkerDatabase({
+    features: featuresB64,
+    matchThreshold,
+  });
+  return value;
+}
+
+function normalizeLiveFrameResult(raw: {
+  ingested?: boolean;
+  width?: number;
+  height?: number;
+  uri?: string | null;
+}): LiveFrameResult {
+  return {
+    ingested: Boolean(raw?.ingested),
+    width: Number(raw?.width) || 0,
+    height: Number(raw?.height) || 0,
+    uri: typeof raw?.uri === 'string' ? raw.uri : null,
+  };
+}
+
+function resolveLiveUri(input: LiveFrameInput): string {
+  if (typeof input === 'string') {
+    if (
+      input.startsWith('file://') ||
+      input.startsWith('content:') ||
+      input.startsWith('data:')
+    ) {
+      return input;
+    }
+    if (input.startsWith('/')) {
+      return `file://${input}`;
+    }
+    return input;
+  }
+  const path = input?.path;
+  if (!path || typeof path !== 'string') {
+    throw new Error('ingestLiveCameraFrame: expected a URI string or { path }');
+  }
+  return path.startsWith('file://') || path.startsWith('content:')
+    ? path
+    : `file://${path}`;
+}
+
+function resolveLiveArgs(
+  input: LiveFrameInput,
+  frontOrOptions?: boolean | LiveFrameOptions,
+  orientationArg?: string
+): { uri: string; options: LiveFrameOptions } {
+  if (typeof input === 'string' || (input && typeof input === 'object' && 'path' in input)) {
+    if (typeof frontOrOptions === 'boolean') {
+      return {
+        uri: resolveLiveUri(input),
+        options: {
+          frontCamera: frontOrOptions,
+          orientation:
+            typeof orientationArg === 'string'
+              ? orientationArg
+              : typeof input === 'object'
+                ? input.orientation
+                : undefined,
+        },
+      };
+    }
+    const opts =
+      frontOrOptions && typeof frontOrOptions === 'object' ? frontOrOptions : {};
+    const photoOrient =
+      typeof input === 'object' && input && 'orientation' in input
+        ? (input as LiveCameraPhoto).orientation
+        : undefined;
+    return {
+      uri: resolveLiveUri(input),
+      options: {
+        frontCamera: opts.frontCamera !== false,
+        orientation: opts.orientation ?? photoOrient,
+        rotateDegrees: opts.rotateDegrees,
+        maxEdge: opts.maxEdge,
+      },
+    };
+  }
+  throw new Error('ingestLiveCameraFrame: invalid arguments');
+}
+
+async function prepareAndMaybeFeed(
+  input: LiveFrameInput,
+  frontOrOptions?: boolean | LiveFrameOptions,
+  orientationArg?: string,
+  feedWorker: boolean = true
+): Promise<LiveFrameResult> {
+  const { uri, options } = resolveLiveArgs(input, frontOrOptions, orientationArg);
+  const maxEdge =
+    options.maxEdge != null && options.maxEdge > 0
+      ? options.maxEdge
+      : LIVE_FRAME_MAX_EDGE;
+
+  let rotateDegrees: number;
+  if (options.rotateDegrees != null && Number.isFinite(options.rotateDegrees)) {
+    rotateDegrees = options.rotateDegrees;
+  } else {
+    const probed = await FaceRecognitionSdkNative.probeLiveImage({ image: uri });
+    const plan = planLiveFrame({
+      frontCamera: options.frontCamera !== false,
+      orientation: options.orientation,
+      width: Number(probed?.width) || 0,
+      height: Number(probed?.height) || 0,
+      maxEdge,
+      platform: Capacitor.getPlatform(),
+    });
+    rotateDegrees = plan.rotateDegrees;
+  }
+
+  const raw = await FaceRecognitionSdkNative.applyLiveFrame({
+    image: uri,
+    rotateDegrees,
+    maxEdge,
+    feedWorker,
+  });
+  return normalizeLiveFrameResult(raw);
+}
+
+export function ingestLiveCameraFrame(
+  input: LiveFrameInput,
+  frontOrOptions?: boolean | LiveFrameOptions,
+  orientation?: string
+): Promise<LiveFrameResult> {
+  return prepareAndMaybeFeed(input, frontOrOptions, orientation, true);
+}
+
+export async function prepareLiveCameraFrame(
+  input: LiveFrameInput,
+  frontOrOptions?: boolean | LiveFrameOptions,
+  orientation?: string
+): Promise<string> {
+  const result = await prepareAndMaybeFeed(
+    input,
+    frontOrOptions,
+    orientation,
+    false
+  );
+  if (!result.uri) {
+    throw new Error('prepareLiveCameraFrame: no output URI');
+  }
+  return result.uri;
+}
+
+export async function addVideoWorkerFrame(
+  input: LiveFrameInput,
+  frontOrOptions?: boolean | LiveFrameOptions,
+  orientation?: string
+): Promise<number> {
+  const result = await prepareAndMaybeFeed(
+    input,
+    frontOrOptions,
+    orientation,
+    true
+  );
+  return result.ingested ? 0 : 1;
+}
+
+export async function exportLastLiveFrame(): Promise<LiveFrameResult> {
+  const raw = await FaceRecognitionSdkNative.exportLastLiveFrame();
+  return normalizeLiveFrameResult(raw);
+}
+
+export async function writeStatus(
+  payload: Record<string, unknown>
+): Promise<void> {
+  await FaceRecognitionSdkNative.writeStatus({
+    payload: JSON.stringify(payload),
+  });
+}
+
+export async function estimatorStatus(): Promise<string> {
+  const { value } = await FaceRecognitionSdkNative.estimatorStatus();
+  return value;
+}
+
+/**
+ * Serialize every live-camera start/stop. Tab switches fire one session's stop
+ * and the next's start in the same React commit; if stop only queued the native
+ * preview teardown after await stopVideoWorker(), the next start could jump the
+ * queue and then get torn down — black / stuck camera on the new tab.
+ */
+let livePreviewChain: Promise<void> = Promise.resolve();
+
+function enqueueLivePreview<T>(task: () => Promise<T>): Promise<T> {
+  const run = livePreviewChain.then(task, task);
+  livePreviewChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+async function startLivePreviewNow(frontCamera: boolean): Promise<void> {
+  try {
+    await FaceRecognitionSdkNative.startLivePreview({ frontCamera });
+  } catch (e) {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('frs-live-camera');
+    }
+    throw e;
+  }
+  // Only punch the page clear after the preview is actually behind it. Doing this
+  // first left a transparent WebView over nothing, which is a black screen.
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.add('frs-live-camera');
+  }
+}
+
+async function stopLivePreviewNow(): Promise<void> {
+  try {
+    await FaceRecognitionSdkNative.stopLivePreview();
+  } finally {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('frs-live-camera');
+    }
+  }
+}
+
+export type LiveCameraOps = {
+  startPreview: (frontCamera: boolean) => Promise<void>;
+  stopPreview: () => Promise<void>;
+};
+
+/**
+ * Run exclusive camera work (full CaptureSession start/stop). Passes raw
+ * preview ops so callers do not nest another queue hop.
+ * The task is enqueued synchronously when this is called — critical for React
+ * cleanups that `void session.stop()` without awaiting.
+ */
+export function withLiveCameraExclusive<T>(
+  task: (ops: LiveCameraOps) => Promise<T>
+): Promise<T> {
+  return enqueueLivePreview(() =>
+    task({
+      startPreview: startLivePreviewNow,
+      stopPreview: stopLivePreviewNow,
+    })
+  );
+}
+
+export async function startLivePreview(frontCamera: boolean = true): Promise<void> {
+  return withLiveCameraExclusive(({ startPreview }) => startPreview(frontCamera));
+}
+
+export async function stopLivePreview(): Promise<void> {
+  return withLiveCameraExclusive(({ stopPreview }) => stopPreview());
+}
+
+export async function takeLiveSnapshot(): Promise<LiveCameraPhoto> {
+  const snap = await FaceRecognitionSdkNative.takeLiveSnapshot();
+  return { path: snap.path || snap.uri };
+}
+
+export async function pickFolderImages(): Promise<
+  { uri: string; fileName: string }[]
+> {
+  const { items } = await FaceRecognitionSdkNative.pickFolderImages();
+  return items ?? [];
+}
+
+export function subscribeVideoWorker(
+  cb: (ev: VideoWorkerEvent) => void
+): () => void {
+  let removed = false;
+  const handle = FaceRecognitionSdkNative.addListener(
+    'FaceRecognitionVideoWorkerEvent',
+    (event) => {
+      const ev = parseVideoWorkerEvent(
+        typeof event?.json === 'string' ? event.json : '{}'
+      );
+      if (ev) cb(ev);
+    }
+  );
+  return () => {
+    if (removed) return;
+    removed = true;
+    void handle.then((h) => h.remove());
+  };
+}
+
+export const SDK_SUCCESS = 0;
+export const SDK_LICENSE_INVALID = 1;
+export const SDK_LICENSE_EXPIRED = 2;
+export const SDK_NOT_ACTIVATED = 3;
+export const SDK_INIT_FAILED = 4;
+
+export const DETECT_POSE = 1 << 0;
+export const DETECT_LANDMARKS = 1 << 1;
+export const DETECT_AGE = 1 << 2;
+export const DETECT_GENDER = 1 << 3;
+export const DETECT_EMOTION = 1 << 4;
+export const DETECT_MASK = 1 << 5;
+export const DETECT_QUALITY = 1 << 6;
+export const DETECT_FACE_QUALITY = 1 << 7;
+export const DETECT_EYES = 1 << 8;
+export const DETECT_LIVENESS = 1 << 9;
+export const DETECT_GLASSES = 1 << 11;
+export const DETECT_LIVENESS_ACCURATE = 1 << 16;
+export const DETECT_ALL = 0xffffffff;
+
+export const LANDMARK_MODE_14 = 14;
+export const LANDMARK_MODE_68 = 68;
+export const LANDMARK_MODE_468 = 468;
+
+export { normalizeFaceBox, normalizeFaceBoxes };
+export { planLiveFrame, LIVE_FRAME_MAX_EDGE };
+export { FaceRecognitionSdkNative as FaceRecognitionSdk };
+export { resultDetailRows, livenessPassed, qualityText };
+export type { DetailRow, ResultDisplaySettings, VideoWorkerEvent };
+export type { FaceRecognitionSdkPlugin } from './definitions';
+export {
+  parseVideoWorkerEvent,
+  workerFaceToBox,
+} from './capture/videoWorker';
+export {
+  checkFace,
+  warningFor,
+  getROIRect1,
+  mapRoiToView,
+  mapFramePoint,
+  mapLandmarksToCrop,
+  mergeLiveness,
+  mergeEyes,
+  hasLiveness,
+} from './capture/captureLogic';
+export type { CaptureState } from './capture/captureLogic';
+export {
+  DEFAULT_CAPTURE_SETTINGS,
+  toCaptureSettings,
+} from './capture/types';
+export type { CaptureSettings, CaptureResult } from './capture/types';

@@ -1,0 +1,37 @@
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+platform :ios, '13.0'
+use_frameworks!
+
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCamera', :path => '../../node_modules/@capacitor/camera'
+  pod 'FaceRecognitionCapacitor', :path => '../../..'
+end
+
+target 'App' do
+  capacitor_pods
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.user_project.native_targets.each do |target|
+      next unless target.name == 'App'
+
+      phase_name = 'Embed FacePlugin FaceRecognitionSDK'
+      target.shell_script_build_phases.each do |phase|
+        target.build_phases.delete(phase) if phase.name == phase_name
+      end
+
+      phase = target.new_shell_script_build_phase(phase_name)
+      phase.shell_script = "\"${SRCROOT}/scripts/embed_lx_frameworks.sh\"\n"
+      target.build_phases.move(phase, target.build_phases.size - 1)
+    end
+    aggregate_target.user_project.save
+  end
+end
