@@ -1,4 +1,4 @@
-# ios/Frameworks — same LX runtimes as Face-Recognition-LivenessDetection-iOS
+# ios/Frameworks — same runtimes as Face-Recognition-LivenessDetection-iOS
 
 ```text
 ios/Frameworks/

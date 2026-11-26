@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copy the LX Face Recognition runtimes (same files as Face-Recognition-LivenessDetection-iOS)
+# Copy the Face Recognition runtimes (same files as Face-Recognition-LivenessDetection-iOS)
 # into the app Frameworks folder and sign them. Device arm64 only.
 set -euo pipefail
 
@@ -61,4 +61,4 @@ SIGN="${SRCROOT}/scripts/sign_nested_facerecognitionsdk.sh"
 if [ -f "$SIGN" ]; then
   /bin/sh "$SIGN"
 fi
-echo "Embedded LX Face Recognition frameworks into $DEST"
+echo "Embedded Face Recognition frameworks into $DEST"

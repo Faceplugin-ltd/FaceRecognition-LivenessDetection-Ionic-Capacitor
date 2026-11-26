@@ -72,7 +72,7 @@ The engine binaries are the same ones the native apps use, so you get identical 
 | Item | Minimum | Recommended |
 | ---- | ------- | ----------- |
 | Android | API 24, `arm64-v8a` | Android 10 or newer |
-| iOS | 15.0, arm64 device | iPhone 11 or newer |
+| iOS | 13.0, arm64 device | iPhone 11 or newer |
 | Node | 18 | 20 |
 | RAM (device) | 4 GB | 6 GB or more |
 
@@ -104,6 +104,8 @@ ios/Frameworks/
 ```
 
 Create the folders if they do not exist, and do **not** rename the files. Then run `npx cap sync ios`.
+
+> The `ios-arm64` slice inside `FacePlugin.xcframework` is called **`FacePPlugin.framework`** — double **P**, and that is not a typo. The podspec links `-framework FacePPlugin` while its search path points at `FacePlugin.xcframework/ios-arm64`. Keep both spellings as they are; renaming either breaks the link step.
 
 ## Run the demo
 
@@ -260,15 +262,40 @@ const score = await similarity(templateA, templateB);   // 1:1
 **3. Live 1:N identification and capture**
 
 ```ts
-import { IdentifySession, CaptureSession } from 'face-recognition-capacitor';
+import {
+  IdentifySession,
+  CaptureSession,
+  DEFAULT_CAPTURE_SETTINGS,
+} from 'face-recognition-capacitor';
 
-const session = new IdentifySession(/* thresholds, templates */);
-await session.start();
-// session emits matches, liveness and tracking events while the camera runs
-await session.stop();
+const identify = new IdentifySession({
+  settings: {
+    frontCamera: true,
+    matchThreshold: 0.8,     // startVideoWorker's own default is 0.67
+    livenessLevel: 0,
+  },
+  featureTemplates,          // the templates you enrolled, in your own order
+  onTracking: (boxes, frame) => drawOverlay(boxes, frame),
+  onMatch: (personIndex, score) => show(featureTemplates[personIndex], score),
+});
+await identify.start();      // preview + video worker + gallery sync
+await identify.stop();
 ```
 
-`CaptureSession` drives the oval capture coach the same way.
+`CaptureSession` drives the oval capture coach the same way — it reports a `CaptureState` and a warning per frame, and `captureNow()` returns the still, the face box and a crop:
+
+```ts
+const capture = new CaptureSession({
+  settings: { ...DEFAULT_CAPTURE_SETTINGS, camera_lens: 'front' },
+  onState: (state, warning, boxes, frame) => coach(state, warning, boxes, frame),
+  onCaptured: ({ uri, faceBox, cropB64 }) => enroll(uri, faceBox, cropB64),
+});
+await capture.start();
+const shot = await capture.captureNow(boxes);
+await capture.stop();
+```
+
+Both sessions own the camera, so start only one at a time.
 
 **4. Status codes**
 
@@ -278,8 +305,19 @@ await session.stop();
 | 1 | `SDK_LICENSE_INVALID` | Invalid license |
 | 2 | `SDK_LICENSE_EXPIRED` | Expired license |
 | 3 | `SDK_NOT_ACTIVATED` | Not activated |
+| 4 | `SDK_INIT_FAILED` | `init()` failed |
 
-Thresholds (match, liveness, pose, eye-close) are parameters you pass from TypeScript, so you can tune them for your product. The example's Settings tab shows the defaults the native apps use.
+**5. Thresholds**
+
+Thresholds (match, liveness, pose, eye-close) are parameters you pass from TypeScript, so you can tune them for your product. Three different defaults apply, depending on where you are:
+
+| Where | Defaults |
+| ----- | -------- |
+| `DEFAULT_CAPTURE_SETTINGS` — guided capture ([`src/capture/types.ts`](src/capture/types.ts)) | `match_threshold` **0.8**, `liveness_threshold` **0.5**, `liveness_level` **0**, `yaw/roll/pitch_threshold` **20**, `eyeclose_threshold` **0.5** |
+| `startVideoWorker` / `syncVideoWorkerDatabase` — live 1:N ([`src/runtime.ts`](src/runtime.ts)) | `matchThreshold` **0.67** |
+| The example's Settings tab ([`example/src/data/settings.ts`](example/src/data/settings.ts)) | `threshold` **0.8**, `livenessThreshold` **0.5**, slider range **0.7 – 0.9** |
+
+The video worker's 0.67 and capture's 0.8 are genuinely different numbers, so pick the one that belongs to the call you are making. Pass your own value and no default applies.
 
 ## Contact
 
