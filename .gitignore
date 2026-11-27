@@ -1,45 +1,63 @@
-# OSX
+# OSX / editors
 .DS_Store
-
-# node
-node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-dist/
-
-# IDE
-.idea
-.vscode
+.idea/
+.vscode/
 *.iml
+*.swp
+*~
 
-# Android
-.gradle
+# node (installed) / web build
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+*.log
+
+# Android build / cache
+.gradle/
 local.properties
 **/build/
-*.aar
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.hprof
+.kotlin/
+.externalNativeBuild/
 example/android/app/build/
+
+# Downloaded engine AAR
+*.aar
 example/android/libfacesdk/**/*.aar
 example/android/libfacesdk/**/*.so
 
-# iOS
+# iOS build / cache / downloaded frameworks
 **/Pods/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+*.ipa
+*.dSYM
+*.dSYM.zip
 ios/Frameworks/**/*.framework/**
 !ios/Frameworks/README.md
 ios/Frameworks/**/*.xcframework/
 
-# Capacitor / Ionic example build output
+# Capacitor / Ionic example web build output (native projects stay tracked)
 example/www/
 example/dist/
 
-# Env
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Env / secrets
 .env
 .env.*
-
-# Python caches from run_android.py / run_ios.py
-__pycache__/
-*.pyc
-*.pyo
+*.jks
+*.keystore

@@ -14,10 +14,13 @@ Jump: [Quick start](#quick-start) · [Get the runtimes](#get-the-runtimes) · [R
 ## Quick start
 
 - [ ] Clone [FaceRecognition-LivenessDetection-Ionic-Capacitor](https://github.com/Faceplugin-ltd/FaceRecognition-LivenessDetection-Ionic-Capacitor)
-- [ ] `npm install && npm run build`, then `cd example && npm install`
 - [ ] Place the native runtimes — [Get the runtimes](#get-the-runtimes)
-- [ ] `python run_android.py` (or `python run_ios.py` on macOS) with a **physical** phone connected
+- [ ] `python run_android.py` (or `python run_ios.py` on macOS) with a **physical** phone plugged in
 - [ ] The demo ships with license keys for `com.faceplugin.facerecognitionsdk` (Android) and `com.faceplugin.facerecognition.app` (iOS)
+
+That is the whole setup. The scripts do the rest: `npm install`, the plugin and example builds,
+`npx cap sync`, and the install onto the phone. They need Node 18+ and JDK 17 (plus Xcode 15+ on
+macOS) on PATH, and stop with a named hint if anything is missing.
 
 ## Introduction
 
@@ -110,17 +113,19 @@ Create the folders if they do not exist, and do **not** rename the files. Then r
 ## Run the demo
 
 ```bash
-git clone https://github.com/Faceplugin-ltd/FaceRecognition-LivenessDetection-Ionic-Capacitor.git
-cd FaceRecognition-LivenessDetection-Ionic-Capacitor
-npm install
-npm run build
-cd example && npm install
-# place the AAR and the iOS frameworks — see above
-cd .. && python run_android.py
-python run_ios.py          # macOS
+python run_android.py     # downloads Releases assets if missing; or: python run_ios.py on macOS
 ```
 
-The run scripts install dependencies, build the web app, run `npx cap sync`, and deploy to the device. To drive it from the IDE instead, run `npm run build && npx cap sync` inside `example/`, then `npx cap open android` or `npx cap open ios` and press Run.
+The runner installs, builds the plugin and the example, runs `npx cap sync` and deploys. By hand:
+
+```bash
+npm install && npm run build
+cd example && npm install && npm run build
+npx cap sync android && npx cap run android
+```
+
+To drive it from the IDE instead, run `npm run build && npx cap sync` inside `example/`, then
+`npx cap open android` or `npx cap open ios` and press Run.
 
 Keep the demo ids so the included license activates:
 

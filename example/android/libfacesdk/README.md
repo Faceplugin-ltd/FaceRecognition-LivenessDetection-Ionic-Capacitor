@@ -6,4 +6,4 @@ Place **`facerecognitionsdk.aar`** here:
 example/android/libfacesdk/facerecognitionsdk.aar
 ```
 
-[Google Drive — Android](https://github.com/Faceplugin-ltd/FaceRecognition-LivenessDetection-Android/releases/tag/latest)
+[GitHub Releases — Android](https://github.com/Faceplugin-ltd/FaceRecognition-LivenessDetection-Android/releases/tag/latest)
