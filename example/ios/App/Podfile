@@ -28,8 +28,13 @@ post_install do |installer|
         target.build_phases.delete(phase) if phase.name == phase_name
       end
 
+      %w[embed_lx_frameworks.sh sign_nested_facerecognitionsdk.sh].each do |name|
+        path = File.expand_path("scripts/#{name}", __dir__)
+        File.chmod(0o755, path) if File.exist?(path)
+      end
       phase = target.new_shell_script_build_phase(phase_name)
-      phase.shell_script = "\"${SRCROOT}/scripts/embed_lx_frameworks.sh\"\n"
+      # /bin/bash so clones work even when Git drops the executable bit.
+      phase.shell_script = "/bin/bash \"${SRCROOT}/scripts/embed_lx_frameworks.sh\"\n"
       target.build_phases.move(phase, target.build_phases.size - 1)
     end
     aggregate_target.user_project.save

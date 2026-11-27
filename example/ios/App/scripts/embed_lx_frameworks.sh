@@ -59,6 +59,6 @@ fi
 
 SIGN="${SRCROOT}/scripts/sign_nested_facerecognitionsdk.sh"
 if [ -f "$SIGN" ]; then
-  /bin/sh "$SIGN"
+  /bin/bash "$SIGN"
 fi
 echo "Embedded Face Recognition frameworks into $DEST"
